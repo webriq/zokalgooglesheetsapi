@@ -52,6 +52,8 @@ exports.getData = async (req, res) => {
 
 /**
  * POST /sheet
+ *
+ * Adds a new row
  */
 exports.addData = async (req, res) => {
   const user = await User.findOne({}).exec();
@@ -95,8 +97,56 @@ exports.addData = async (req, res) => {
 
 /**
  * PUT /sheet
+ *
+ * Updates a given row depending on matched column name and value
+ * and passed data
  */
 exports.updateData = async (req, res) => {
+  const user = await User.findOne({}).exec();
+
+  oauth2Client.credentials = {
+    access_token: user.getApiToken("accessToken"),
+    refresh_token: user.getApiToken("refreshToken"),
+    expiry_date: true
+  };
+
+  const keys = await this.getKeys();
+  let data = keys.map(k => req.body[k]);
+
+  var values = [data];
+  var body = {
+    values: values
+  };
+  var valueInputOption = "USER_ENTERED";
+  var range = "A14:C14";
+  var spreadsheetId = req.params.id;
+
+  sheets.spreadsheets.values.update(
+    {
+      auth: oauth2Client,
+      spreadsheetId: process.env.APP_GOOGLE_SHEET_ID,
+      range: range,
+      valueInputOption: valueInputOption,
+      resource: body
+    },
+    function(err, result) {
+      if (err) {
+        // Handle error.
+        console.log(err);
+      } else {
+        console.log(result.data);
+        res.json(result.data);
+      }
+    }
+  );
+};
+
+/**
+ * DELETE /sheet
+ *
+ * Deletes matched row by column name and value of entire spreadsheet
+ */
+exports.deleteData = async (req, res) => {
   const user = await User.findOne({}).exec();
 
   oauth2Client.credentials = {
@@ -108,7 +158,7 @@ exports.updateData = async (req, res) => {
 
 /**
  * Retrieve the keys of spreadsheet.
- * It's always the first column of the spreadsheet
+ * It's always located in the first column
  */
 exports.getKeys = async (req, res) => {
   const user = await User.findOne({}).exec();
@@ -119,7 +169,6 @@ exports.getKeys = async (req, res) => {
     expiry_date: true
   };
 
-  // Retrieve first the keys in spreadsheet to determine passed parameters are valid
   return new Promise((resolve, reject) => {
     sheets.spreadsheets.values.get(
       {

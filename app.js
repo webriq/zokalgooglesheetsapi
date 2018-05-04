@@ -163,6 +163,8 @@ app.get(
 /** Primary logic routes */
 app.get("/sheet", sheetController.getData);
 app.post("/sheet", sheetController.addData);
+app.put("/sheet", sheetController.updateData);
+app.delete("/sheet", sheetController.deleteData);
 
 /**
  * OAuth authentication routes. (Sign in)

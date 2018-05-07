@@ -92,7 +92,7 @@ app.use(passport.initialize());
 app.use(passport.session());
 app.use(flash());
 app.use((req, res, next) => {
-  if (req.path === "/api/upload" || req.path === "/sheet") {
+  if (req.path === "/api/upload" || req.path.match(/^\/sheet/)) {
     next();
   } else {
     lusca.csrf()(req, res, next);
@@ -163,8 +163,8 @@ app.get(
 /** Primary logic routes */
 app.get("/sheet", sheetController.getData);
 app.post("/sheet", sheetController.addData);
-app.put("/sheet", sheetController.updateData);
-app.delete("/sheet", sheetController.deleteData);
+app.put("/sheet/:searchKey/:searchVal", sheetController.updateData);
+app.delete("/sheet/:searchKey/:searchVal", sheetController.deleteData);
 
 /**
  * OAuth authentication routes. (Sign in)

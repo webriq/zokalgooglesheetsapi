@@ -10,6 +10,8 @@ const oauth2Client = new google.auth.OAuth2(
 );
 
 /**
+ * GET /sheet
+ *
  * Retrieves all data in rows
  */
 exports.getData = async (req, res) => {
@@ -21,33 +23,8 @@ exports.getData = async (req, res) => {
     expiry_date: true
   };
 
-  sheets.spreadsheets.values.batchGet(
-    {
-      auth: oauth2Client,
-      spreadsheetId: process.env.APP_GOOGLE_SHEET_ID,
-      ranges: ["A1:Z1", "A2:Z100"]
-    },
-    (err, result) => {
-      if (err) {
-        console.error("The API returned an error.");
-        throw err;
-      }
-
-      // @todo: Improve key and value assignment code
-      const keys = result.data.valueRanges[0].values[0];
-      const values = result.data.valueRanges[1].values;
-
-      finalData = values.map(v => {
-        newData = {};
-        for (i = 0; i < keys.length; i++) {
-          newData[keys[i]] = v[i];
-        }
-        return newData;
-      });
-
-      res.json(finalData);
-    }
-  );
+  const response = await this.getValues(oauth2Client);
+  return res.json(response);
 };
 
 /**
@@ -72,8 +49,7 @@ exports.addData = async (req, res) => {
     values: values
   };
   var valueInputOption = "USER_ENTERED";
-  var range = "A1:Z1";
-  var spreadsheetId = req.params.id;
+  var range = "A1:AA6000";
 
   sheets.spreadsheets.values.append(
     {
@@ -110,35 +86,70 @@ exports.updateData = async (req, res) => {
     expiry_date: true
   };
 
-  const keys = await this.getKeys();
-  let data = keys.map(k => req.body[k]);
+  const sheetData = await this.getValues(oauth2Client);
+  const { searchKey, searchVal } = req.params;
 
-  var values = [data];
-  var body = {
-    values: values
-  };
-  var valueInputOption = "USER_ENTERED";
-  var range = "A14:C14";
-  var spreadsheetId = req.params.id;
-
-  sheets.spreadsheets.values.update(
-    {
-      auth: oauth2Client,
-      spreadsheetId: process.env.APP_GOOGLE_SHEET_ID,
-      range: range,
-      valueInputOption: valueInputOption,
-      resource: body
-    },
-    function(err, result) {
-      if (err) {
-        // Handle error.
-        console.log(err);
-      } else {
-        console.log(result.data);
-        res.json(result.data);
-      }
+  // Determine the row of data to be updated
+  searchIndex = null;
+  for (i = 0; i < sheetData.length; i++) {
+    if (sheetData[i][searchKey] === searchVal) {
+      searchIndex = i;
+      console.log(
+        `Found: ${JSON.stringify(
+          sheetData[i],
+          null,
+          2
+        )} at index: ${searchIndex}`
+      );
+      break;
     }
-  );
+  }
+
+  if (searchIndex === null) {
+    return res.status(200).json({
+      message: `Cannot find '${searchVal}' in '${searchKey}' column.`
+    });
+  }
+
+  const startRowIndex = searchIndex + 1; // adding first row
+  const keys = Object.keys(sheetData[0]);
+  const data = keys.map(k => req.body[k]);
+  const values = [data];
+  const majorDimension = "ROWS";
+  const valueInputOption = "USER_ENTERED";
+
+  const request = {
+    spreadsheetId: process.env.APP_GOOGLE_SHEET_ID,
+    resource: {
+      data: [
+        {
+          values: values,
+          majorDimension: majorDimension,
+          dataFilter: {
+            gridRange: {
+              startRowIndex: startRowIndex,
+              sheetId: 0 // default fisrt sheet
+            }
+          }
+        }
+      ],
+      valueInputOption: valueInputOption
+    },
+    auth: oauth2Client
+  };
+
+  sheets.spreadsheets.values.batchUpdateByDataFilter(request, function(
+    err,
+    result
+  ) {
+    if (err) {
+      // Handle error.
+      console.log(err);
+    } else {
+      console.log(result.data);
+      res.json(result.data);
+    }
+  });
 };
 
 /**
@@ -154,6 +165,111 @@ exports.deleteData = async (req, res) => {
     refresh_token: user.getApiToken("refreshToken"),
     expiry_date: true
   };
+
+  const sheetData = await this.getValues(oauth2Client);
+  const { searchKey, searchVal } = req.params;
+
+  // Determine the row of data to be updated
+  searchIndex = null;
+  for (i = 0; i < sheetData.length; i++) {
+    if (sheetData[i][searchKey] === searchVal) {
+      searchIndex = i;
+      console.log(
+        `Found: ${JSON.stringify(
+          sheetData[i],
+          null,
+          2
+        )} at index: ${searchIndex}`
+      );
+      break;
+    }
+  }
+
+  if (searchIndex === null) {
+    return res.status(200).json({
+      message: `Cannot find '${searchVal}' in '${searchKey}' column.`
+    });
+  }
+
+  const startIndex = searchIndex + 1; // adding first row
+  const endIndex = searchIndex + 2; // adding first row
+  const sheetId = 0;
+
+  const request = {
+    spreadsheetId: process.env.APP_GOOGLE_SHEET_ID,
+    resource: {
+      requests: [
+        {
+          deleteDimension: {
+            range: {
+              dimension: "ROWS",
+              sheetId: sheetId,
+              startIndex: startIndex,
+              endIndex: endIndex
+            }
+          }
+        }
+      ]
+    },
+    auth: oauth2Client
+  };
+
+  sheets.spreadsheets.batchUpdate(request, function(err, result) {
+    if (err) {
+      // Handle error.
+      console.log(err);
+    }
+
+    console.log(result.data);
+    res.json(result.data);
+  });
+};
+
+/**
+ * Retrieve all data found in spreadsheet
+ */
+exports.getValues = async (oauth2Client, sheetId = 0) => {
+  const request = {
+    spreadsheetId: process.env.APP_GOOGLE_SHEET_ID,
+    resource: {
+      dataFilters: [
+        {
+          gridRange: {
+            startRowIndex: 0,
+            sheetId: sheetId
+          }
+        }
+      ]
+    },
+    auth: oauth2Client
+  };
+
+  let result;
+  try {
+    result = await sheets.spreadsheets.values.batchGetByDataFilter(request);
+  } catch (err) {
+    console.error(err);
+    throw err;
+  }
+
+  const keys = result.data.valueRanges[0].valueRange.values[0];
+  const values = result.data.valueRanges[0].valueRange.values;
+
+  // assigning keys to values
+  const finalData = values.map(v => {
+    newData = {};
+
+    for (i = 0; i < keys.length; i++) {
+      newData[keys[i]] = v[i];
+    }
+
+    return newData;
+  });
+
+  // delete first row of data as it's used as keys
+  finalData.shift();
+
+  return finalData;
 };
 
 /**

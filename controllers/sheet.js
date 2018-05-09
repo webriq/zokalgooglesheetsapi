@@ -16,6 +16,7 @@ const oauth2Client = new google.auth.OAuth2(
  */
 exports.getData = async (req, res) => {
   const user = await User.findOne({}).exec();
+  const sheetTitle = (req.query && req.query.sheetTitle) || 0;
 
   oauth2Client.credentials = {
     access_token: user.getApiToken("accessToken"),
@@ -23,7 +24,7 @@ exports.getData = async (req, res) => {
     expiry_date: true
   };
 
-  const response = await this.getValues(oauth2Client);
+  const response = await this.getValues(oauth2Client, sheetTitle);
   return res.json(response);
 };
 
@@ -34,6 +35,7 @@ exports.getData = async (req, res) => {
  */
 exports.addData = async (req, res) => {
   const user = await User.findOne({}).exec();
+  const sheetTitle = (req.query && req.query.sheetTitle) || 0;
 
   oauth2Client.credentials = {
     access_token: user.getApiToken("accessToken"),
@@ -79,6 +81,7 @@ exports.addData = async (req, res) => {
  */
 exports.updateData = async (req, res) => {
   const user = await User.findOne({}).exec();
+  const sheetTitle = (req.query && req.query.sheetTitle) || 0;
 
   oauth2Client.credentials = {
     access_token: user.getApiToken("accessToken"),
@@ -86,7 +89,7 @@ exports.updateData = async (req, res) => {
     expiry_date: true
   };
 
-  const sheetData = await this.getValues(oauth2Client);
+  const sheetData = await this.getValues(oauth2Client, sheetTitle);
   const { searchKey, searchVal } = req.params;
 
   // Determine the row of data to be updated
@@ -118,6 +121,8 @@ exports.updateData = async (req, res) => {
   const majorDimension = "ROWS";
   const valueInputOption = "USER_ENTERED";
 
+  const sheetId = await this.getSheetId(oauth2Client, sheetTitle);
+
   const request = {
     spreadsheetId: process.env.APP_GOOGLE_SHEET_ID,
     resource: {
@@ -128,7 +133,7 @@ exports.updateData = async (req, res) => {
           dataFilter: {
             gridRange: {
               startRowIndex: startRowIndex,
-              sheetId: 0 // default fisrt sheet
+              sheetId: sheetId
             }
           }
         }
@@ -159,6 +164,7 @@ exports.updateData = async (req, res) => {
  */
 exports.deleteData = async (req, res) => {
   const user = await User.findOne({}).exec();
+  const sheetTitle = (req.params && req.params.sheetTitle) || 0;
 
   oauth2Client.credentials = {
     access_token: user.getApiToken("accessToken"),
@@ -166,7 +172,7 @@ exports.deleteData = async (req, res) => {
     expiry_date: true
   };
 
-  const sheetData = await this.getValues(oauth2Client);
+  const sheetData = await this.getValues(oauth2Client, sheetTitle);
   const { searchKey, searchVal } = req.params;
 
   // Determine the row of data to be updated
@@ -193,7 +199,7 @@ exports.deleteData = async (req, res) => {
 
   const startIndex = searchIndex + 1; // adding first row
   const endIndex = searchIndex + 2; // adding first row
-  const sheetId = 0;
+  const sheetId = await this.getSheetId(oauth2Client, sheetTitle);
 
   const request = {
     spreadsheetId: process.env.APP_GOOGLE_SHEET_ID,
@@ -226,9 +232,35 @@ exports.deleteData = async (req, res) => {
 };
 
 /**
+ * Determine sheetId based on sheet title
+ */
+exports.getSheetId = async (oauth2Client, sheetTitle = null) => {
+  // sheetID is 0 by default, return immediately when not specified
+  if (!sheetTitle) {
+    return 0;
+  }
+
+  // Get spreadsheet information
+  const spreadsheet = await sheets.spreadsheets.get({
+    spreadsheetId: process.env.APP_GOOGLE_SHEET_ID,
+    auth: oauth2Client
+  });
+
+  // Find sheet based on title
+  const sheet =
+    spreadsheet &&
+    spreadsheet.data &&
+    spreadsheet.data.sheets.find(s => s.properties.title === sheetTitle);
+
+  // Override sheetId when found
+  return (sheet && sheet.properties.sheetId) || null;
+};
+
+/**
  * Retrieve all data found in spreadsheet
  */
-exports.getValues = async (oauth2Client, sheetId = 0) => {
+exports.getValues = async (oauth2Client, sheetTitle = null) => {
+  const sheetId = await this.getSheetId(oauth2Client, sheetTitle);
   const request = {
     spreadsheetId: process.env.APP_GOOGLE_SHEET_ID,
     resource: {
@@ -249,7 +281,7 @@ exports.getValues = async (oauth2Client, sheetId = 0) => {
     result = await sheets.spreadsheets.values.batchGetByDataFilter(request);
   } catch (err) {
     console.error(err);
-    throw err;
+    return res.status(500).json(err && err.message);
   }
 
   const keys = result.data.valueRanges[0].valueRange.values[0];

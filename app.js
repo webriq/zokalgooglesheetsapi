@@ -164,7 +164,10 @@ app.get(
 app.get("/sheet", sheetController.getData);
 app.post("/sheet", sheetController.addData);
 app.put("/sheet/:searchKey/:searchVal", sheetController.updateData);
-app.delete("/sheet/:searchKey/:searchVal", sheetController.deleteData);
+app.delete(
+  "/sheet/:searchKey/:searchVal/:sheetTitle?",
+  sheetController.deleteData
+);
 
 /**
  * OAuth authentication routes. (Sign in)

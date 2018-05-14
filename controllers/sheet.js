@@ -31,7 +31,7 @@ exports.getData = async (req, res) => {
 /**
  * POST /sheet
  *
- * Adds a new row
+ * Inserts a new row on the spreadsheet based on passed data
  */
 exports.addData = async (req, res) => {
   const user = await User.findOne({}).exec();
@@ -43,34 +43,48 @@ exports.addData = async (req, res) => {
     expiry_date: true
   };
 
-  const keys = await this.getKeys();
-  let data = keys.map(k => req.body[k]);
+  const sheetData = await this.getValues(oauth2Client, sheetTitle);
+  const startRowIndex = sheetData.length + 1; // adding first row
+  const keys = Object.keys(sheetData[0]);
+  const data = keys.map(k => req.body[k]);
+  const values = [data];
+  const majorDimension = "ROWS";
+  const valueInputOption = "USER_ENTERED";
 
-  var values = [data];
-  var body = {
-    values: values
-  };
-  var valueInputOption = "USER_ENTERED";
-  var range = "A1:AA6000";
+  const sheetId = await this.getSheetId(oauth2Client, sheetTitle);
 
-  sheets.spreadsheets.values.append(
-    {
-      auth: oauth2Client,
-      spreadsheetId: process.env.APP_GOOGLE_SHEET_ID,
-      range: range,
-      valueInputOption: valueInputOption,
-      resource: body
+  const request = {
+    spreadsheetId: process.env.APP_GOOGLE_SHEET_ID,
+    resource: {
+      data: [
+        {
+          values: values,
+          majorDimension: majorDimension,
+          dataFilter: {
+            gridRange: {
+              startRowIndex: startRowIndex,
+              sheetId: sheetId
+            }
+          }
+        }
+      ],
+      valueInputOption: valueInputOption
     },
-    function(err, result) {
-      if (err) {
-        // Handle error.
-        console.log(err);
-      } else {
-        console.log(result.data);
-        res.json(result.data);
-      }
+    auth: oauth2Client
+  };
+
+  sheets.spreadsheets.values.batchUpdateByDataFilter(request, function(
+    err,
+    result
+  ) {
+    if (err) {
+      // Handle error.
+      console.log(err);
+    } else {
+      console.log(result.data);
+      res.json(result.data);
     }
-  );
+  });
 };
 
 /**

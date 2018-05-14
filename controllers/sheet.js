@@ -73,18 +73,18 @@ exports.addData = async (req, res) => {
     auth: oauth2Client
   };
 
-  sheets.spreadsheets.values.batchUpdateByDataFilter(request, function(
-    err,
-    result
-  ) {
-    if (err) {
-      // Handle error.
-      console.log(err);
-    } else {
-      console.log(result.data);
-      res.json(result.data);
-    }
-  });
+  sheets.spreadsheets.values.batchUpdateByDataFilter(
+    request,
+    async function(err, result) {
+      if (err) {
+        // Handle error.
+        console.log(err);
+      } else {
+        const updatedValues = await this.getValues(oauth2Client, sheetTitle);
+        return res.json(updatedValues);
+      }
+    }.bind(this)
+  );
 };
 
 /**
@@ -157,18 +157,20 @@ exports.updateData = async (req, res) => {
     auth: oauth2Client
   };
 
-  sheets.spreadsheets.values.batchUpdateByDataFilter(request, function(
-    err,
-    result
-  ) {
-    if (err) {
-      // Handle error.
-      console.log(err);
-    } else {
-      console.log(result.data);
-      res.json(result.data);
-    }
-  });
+  sheets.spreadsheets.values.batchUpdateByDataFilter(
+    request,
+    async function(err, result) {
+      if (err) {
+        // Handle error.
+        console.log(err);
+      } else {
+        console.log(result.data);
+
+        const updatedValues = await this.getValues(oauth2Client, sheetTitle);
+        return res.json(updatedValues);
+      }
+    }.bind(this)
+  );
 };
 
 /**
@@ -234,15 +236,18 @@ exports.deleteData = async (req, res) => {
     auth: oauth2Client
   };
 
-  sheets.spreadsheets.batchUpdate(request, function(err, result) {
-    if (err) {
-      // Handle error.
-      console.log(err);
-    }
+  sheets.spreadsheets.batchUpdate(
+    request,
+    async function(err, result) {
+      if (err) {
+        // Handle error.
+        console.log(err);
+      }
 
-    console.log(result.data);
-    res.json(result.data);
-  });
+      const updatedValues = await this.getValues(oauth2Client, sheetTitle);
+      return res.json(updatedValues);
+    }.bind(this)
+  );
 };
 
 /**
